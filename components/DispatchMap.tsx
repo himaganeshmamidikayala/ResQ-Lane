@@ -5,36 +5,74 @@ import { MapContainer, TileLayer, Marker, Polyline, Popup, CircleMarker, useMapE
 import L from 'leaflet';
 import { getLiveRoadRoute, findNearestUTurn } from '@/lib/routing';
 
-const createIcon = (bg: string, label: string) =>
+const createTacticalMarkerIcon = (
+  accentColor: string,
+  badgeText: string,
+  code: string,
+  anchorWidth: number = 115
+) =>
   L.divIcon({
-    className: 'custom-radar-icon',
+    className: 'tactical-map-marker',
     html: `
       <div style="
-        background: ${bg};
-        color: white;
-        font-family: monospace;
-        font-size: 11px;
-        font-weight: 700;
-        padding: 4px 10px;
-        border-radius: 9999px;
-        box-shadow: 0 0 16px ${bg};
-        border: 1px solid rgba(255,255,255,0.6);
         display: flex;
+        flex-direction: column;
         align-items: center;
-        gap: 6px;
-        white-space: nowrap;
+        width: ${anchorWidth}px;
+        transform: translate3d(0, 0, 0);
       ">
-        <span style="width: 8px; height: 8px; border-radius: 50%; background: white; display: inline-block;"></span>
-        ${label}
+        <div style="
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          background: #121215;
+          border: 1px solid #27272a;
+          border-left: 3px solid ${accentColor};
+          border-radius: 5px;
+          padding: 2.5px 6px;
+          font-family: inherit;
+          box-shadow: 0 4px 10px rgba(0, 0, 0, 0.7);
+          white-space: nowrap;
+          pointer-events: auto;
+        ">
+          <span style="
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1px 3.5px;
+            border-radius: 2px;
+            background: ${accentColor}25;
+            color: ${accentColor};
+            font-size: 8.5px;
+            font-weight: 800;
+            font-family: ui-monospace, monospace;
+            line-height: 1;
+          ">${code}</span>
+          <span style="
+            color: #f4f4f5;
+            font-size: 10px;
+            font-weight: 600;
+            line-height: 1;
+          ">${badgeText}</span>
+        </div>
+        <div style="
+          width: 5px;
+          height: 5px;
+          border-radius: 50%;
+          background: ${accentColor};
+          border: 1px solid #ffffff;
+          margin-top: 2px;
+          box-shadow: 0 0 5px ${accentColor};
+        "></div>
       </div>
     `,
-    iconSize: [160, 26],
-    iconAnchor: [80, 13],
+    iconSize: [anchorWidth, 24],
+    iconAnchor: [anchorWidth / 2, 24],
   });
 
-const crashMarkerIcon = createIcon('#ef4444', 'INCIDENT POINT');
-const ambulanceMarkerIcon = createIcon('#3b82f6', '108 PATROL #01');
-const uturnMarkerIcon = createIcon('#f59e0b', 'GRADE-SEPARATED U-TURN');
+const crashMarkerIcon = createTacticalMarkerIcon('#f43f5e', 'Crash Location', 'SOS', 110);
+const ambulanceMarkerIcon = createTacticalMarkerIcon('#38bdf8', '108 Base Station', 'EMS', 116);
+const uturnMarkerIcon = createTacticalMarkerIcon('#fbbf24', 'Median U-Turn Cut', 'CUT', 120);
 
 interface Props {
   incidentCoords: [number, number] | null;
@@ -77,6 +115,7 @@ export default function DispatchMap({
       // 1. Direct optimal route
       const direct = await getLiveRoadRoute(ambulanceBase, incidentCoords);
       setDirectPath(direct.coordinates);
+      setAnimIndex(0);
 
       // 2. Identify required U-turn interchange if median conflict occurs
       const nearestCut = findNearestUTurn(incidentCoords);
@@ -96,12 +135,12 @@ export default function DispatchMap({
     };
 
     computeRoutes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [incidentCoords, activeDirection]);
 
   // Live animation along direct path
   useEffect(() => {
     if (directPath.length === 0) return;
-    setAnimIndex(0);
     const interval = setInterval(() => {
       setAnimIndex((prev) => (prev + 1) % directPath.length);
     }, 700);
@@ -109,13 +148,19 @@ export default function DispatchMap({
   }, [directPath]);
 
   return (
-    <div className="relative h-full w-full rounded-2xl overflow-hidden border border-slate-800 shadow-2xl bg-slate-950">
-      {/* Top Map HUD */}
-      <div className="absolute top-4 left-4 z-[1000] bg-slate-950/90 backdrop-blur-md border border-slate-700/80 rounded-xl px-4 py-2.5 shadow-2xl flex items-center gap-3 text-xs font-mono">
-        <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 animate-ping" />
-        <span className="text-white font-bold tracking-wider">LIVE ROUTING ENGINE (OSRM NHAI GRAPH)</span>
-        <span className="text-slate-600">|</span>
-        <span className="text-cyan-400 font-semibold">CLICK ANYWHERE ON MAP TO SIMULATE INCIDENT</span>
+    <div className="relative h-full w-full rounded-xl overflow-hidden border border-[#27272a] shadow-sm bg-[#09090b]">
+      {/* Top Tactical Map HUD */}
+      <div className="absolute top-2.5 left-2.5 right-2.5 sm:right-auto z-[1000] bg-[#121215]/95 backdrop-blur-md border border-[#27272a] rounded-lg px-3 py-1.5 shadow-lg flex flex-wrap items-center gap-2 text-xs font-mono">
+        <div className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full bg-emerald-400 shrink-0" />
+          <span className="text-zinc-100 font-bold tracking-wide text-[11px]">
+            DEMO ENVIRONMENT • NH-16 (MANGALAGIRI–VIJAYAWADA)
+          </span>
+        </div>
+        <span className="hidden sm:inline text-zinc-600">|</span>
+        <span className="text-cyan-400 text-[10px] font-medium">
+          Click map to simulate coordinate
+        </span>
       </div>
 
       <MapContainer
@@ -124,25 +169,39 @@ export default function DispatchMap({
         scrollWheelZoom={true}
         className="h-full w-full"
       >
+        {/* High-detail OpenStreetMap basemap with tactical dark operations styling */}
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+          maxZoom={19}
         />
 
         <MapClickHandler onClick={onMapClick} />
 
         {/* 108 Base Station */}
         <Marker position={ambulanceBase} icon={ambulanceMarkerIcon}>
-          <Popup>108 Emergency Trauma Response Base (Mangalagiri)</Popup>
+          <Popup>
+            <div className="font-mono text-xs">
+              <div className="text-sky-400 font-bold mb-1">108 TRAUMA DISPATCH BASE</div>
+              <div className="text-zinc-300">Mangalagiri NH-16 Emergency Hub</div>
+              <div className="text-zinc-500 text-[10px] mt-1">Coordinates: {ambulanceBase[0]}, {ambulanceBase[1]}</div>
+            </div>
+          </Popup>
         </Marker>
 
         {/* Incident Marker */}
         {incidentCoords && (
           <Marker position={incidentCoords} icon={crashMarkerIcon}>
             <Popup>
-              DYNAMIC CRASH POINT<br />
-              Lat: {incidentCoords[0].toFixed(4)} | Lng: {incidentCoords[1].toFixed(4)}<br />
-              Carriageway: {activeDirection ? `Towards ${activeDirection}` : 'Pending Orientation'}
+              <div className="font-mono text-xs">
+                <div className="text-rose-400 font-bold mb-1">INCIDENT TELEMETRY</div>
+                <div className="text-zinc-300">
+                  Carriageway: <span className="font-bold text-white">{activeDirection ? `Towards ${activeDirection}` : 'Pending Orientation'}</span>
+                </div>
+                <div className="text-zinc-400 text-[10px] mt-1">
+                  Lat: {incidentCoords[0].toFixed(5)} | Lng: {incidentCoords[1].toFixed(5)}
+                </div>
+              </div>
             </Popup>
           </Marker>
         )}
@@ -150,62 +209,89 @@ export default function DispatchMap({
         {/* Nearest U-turn Interchange Marker */}
         {uturnNode && (
           <Marker position={uturnNode.coords} icon={uturnMarkerIcon}>
-            <Popup>Mandatory Grade-Separated Cut: {uturnNode.name}</Popup>
+            <Popup>
+              <div className="font-mono text-xs">
+                <div className="text-amber-400 font-bold mb-1">MANDATORY MEDIAN CUT</div>
+                <div className="text-zinc-300">{uturnNode.name}</div>
+                <div className="text-zinc-500 text-[10px] mt-1">Grade-separated U-turn turnaround point</div>
+              </div>
+            </Popup>
           </Marker>
         )}
 
-        {/* Detour Route (Red Dotted Line) */}
+        {/* Detour Route (Opposing Carriageway - Red Dashed Line) */}
         {detourPath.length > 0 && (
           <Polyline
             positions={detourPath}
             pathOptions={{
-              color: '#dc2626',
-              weight: 5,
-              dashArray: '8, 12',
-              opacity: 0.85,
+              color: '#f43f5e',
+              weight: 3.5,
+              dashArray: '6, 8',
+              opacity: 0.8,
+              lineCap: 'round',
+              lineJoin: 'round',
             }}
           />
         )}
 
-        {/* Direct Optimal Route (Solid Emerald Green) */}
+        {/* Direct Optimal Route (Solid Emerald Green with underlay) */}
         {directPath.length > 0 && (
-          <Polyline
-            positions={directPath}
-            pathOptions={{
-              color: '#059669',
-              weight: 7,
-              opacity: 0.95,
-            }}
-          />
+          <>
+            <Polyline
+              positions={directPath}
+              pathOptions={{
+                color: '#064e3b',
+                weight: 7,
+                opacity: 0.7,
+                lineCap: 'round',
+                lineJoin: 'round',
+              }}
+            />
+            <Polyline
+              positions={directPath}
+              pathOptions={{
+                color: '#10b981',
+                weight: 4.5,
+                opacity: 0.95,
+                lineCap: 'round',
+                lineJoin: 'round',
+              }}
+            />
+          </>
         )}
 
         {/* Animated Ambulance Node */}
         {directPath[animIndex] && (
           <CircleMarker
             center={directPath[animIndex]}
-            radius={9}
+            radius={7}
             pathOptions={{
               color: '#10b981',
               fillColor: '#ffffff',
               fillOpacity: 1,
-              weight: 3,
+              weight: 2.5,
             }}
           />
         )}
       </MapContainer>
 
       {/* Dynamic Bottom Legend Overlay */}
-      <div className="absolute bottom-4 left-4 z-[1000] bg-slate-950/95 backdrop-blur-md border border-slate-800 rounded-xl p-3 text-[11px] font-mono space-y-1.5 shadow-2xl">
+      <div className="absolute bottom-2.5 left-2.5 z-[1000] bg-[#121215]/95 backdrop-blur-md border border-[#27272a] rounded-lg px-3 py-2 text-[10px] font-mono shadow-lg flex flex-wrap items-center gap-x-4 gap-y-1.5 max-w-[calc(100%-1.25rem)]">
         <div className="flex items-center gap-2">
-          <span className="h-2.5 w-6 bg-red-600 rounded-full" />
-          <span className="text-red-400 font-semibold">
-            Standard GPS Detour (Trapped on Opposing Carriageway)
+          <span className="h-1.5 w-4 bg-emerald-500 rounded-sm shrink-0" />
+          <span className="text-zinc-300">
+            <strong className="text-emerald-400 font-semibold">ResQ-Lane:</strong> Direct Carriageway
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="h-2.5 w-6 bg-emerald-500 rounded-full shadow-[0_0_8px_#10b981]" />
-          <span className="text-emerald-300 font-semibold">
-            ResQ-Lane Median-Aware Ingress (Direct Highway Access)
+          <span
+            className="h-1.5 w-4 rounded-sm shrink-0 border border-rose-500/50"
+            style={{
+              backgroundImage: 'repeating-linear-gradient(90deg, #f43f5e, #f43f5e 3px, transparent 3px, transparent 6px)',
+            }}
+          />
+          <span className="text-zinc-400">
+            <strong className="text-rose-400 font-semibold">Standard Detour:</strong> Median U-Turn Penalty
           </span>
         </div>
       </div>
