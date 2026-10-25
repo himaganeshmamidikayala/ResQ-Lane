@@ -5,7 +5,8 @@ import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/supabase';
 import {
   Radio, Route, Clock, ShieldAlert, CheckCircle2,
-  AlertTriangle, Volume2, Activity, Zap, Compass, MousePointerClick
+  AlertTriangle, Volume2, Activity, Zap, Compass, MousePointerClick,
+  Send, X
 } from 'lucide-react';
 
 const DispatchMap = dynamic(() => import('@/components/DispatchMap'), {
@@ -73,6 +74,69 @@ export default function DispatchConsole() {
     detourMin: 21.2,
     distanceKm: 5.4,
   });
+
+  // Operator SMS modal state
+  const [isSmsModalOpen, setIsSmsModalOpen] = useState(false);
+  const [smsPhoneInput, setSmsPhoneInput] = useState('');
+  const [smsSending, setSmsSending] = useState(false);
+  const [smsFeedback, setSmsFeedback] = useState<{
+    type: 'success' | 'warning' | 'error';
+    title: string;
+    description: string;
+  } | null>(null);
+
+  const handleSendOperatorSms = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!smsPhoneInput.trim()) return;
+
+    setSmsSending(true);
+    setSmsFeedback(null);
+
+    try {
+      const res = await fetch('/api/sms/send-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phoneNumber: smsPhoneInput.trim() }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setSmsFeedback({
+          type: 'error',
+          title: 'Request Rejected',
+          description: data.error || 'Failed to dispatch SMS request.',
+        });
+      } else if (data.status === 'CONFIG_MISSING') {
+        setSmsFeedback({
+          type: 'warning',
+          title: 'Simulation Mode (Unconfigured)',
+          description: data.error || 'No live SMS provider credentials configured. Simulation logged.',
+        });
+      } else if (data.status === 'ACCEPTED_BY_PROVIDER') {
+        setSmsFeedback({
+          type: 'success',
+          title: 'SMS Queued by Provider',
+          description: `SOS link accepted by ${data.provider} for ${data.maskedRecipient || 'recipient'}.`,
+        });
+        setSmsPhoneInput('');
+      } else {
+        setSmsFeedback({
+          type: 'warning',
+          title: data.status || 'Notice',
+          description: data.error || data.message || 'Processed with advisory.',
+        });
+      }
+    } catch (err: unknown) {
+      setSmsFeedback({
+        type: 'error',
+        title: 'Network Error',
+        description: err instanceof Error ? err.message : 'Could not contact SMS dispatch service.',
+      });
+    } finally {
+      setSmsSending(false);
+    }
+  };
 
   const playDispatchSound = async () => {
     try {
@@ -299,6 +363,18 @@ export default function DispatchConsole() {
           >
             <Volume2 className="h-3.5 w-3.5 text-rose-400 shrink-0" />
             <span>Test Siren</span>
+          </button>
+
+          {/* Send SOS Link Button */}
+          <button
+            onClick={() => {
+              setIsSmsModalOpen(true);
+              setSmsFeedback(null);
+            }}
+            className="h-9 bg-[#18181b] hover:bg-[#202026] border border-[#27272a] hover:border-cyan-500/40 text-zinc-200 hover:text-cyan-300 px-3.5 rounded-lg text-xs font-medium transition active:scale-95 flex items-center gap-2 cursor-pointer font-sans"
+          >
+            <Send className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
+            <span>Send SOS Link</span>
           </button>
         </div>
       </header>
@@ -557,6 +633,101 @@ export default function DispatchConsole() {
           />
         </section>
       </div>
+
+      {/* Operator Send SOS Link Modal */}
+      {isSmsModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="bg-[#121215] border border-[#27272a] rounded-2xl w-full max-w-sm p-5 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-[#27272a]">
+              <div className="flex items-center gap-2">
+                <div className="h-7 w-7 rounded bg-cyan-950/60 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+                  <Send className="h-3.5 w-3.5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white leading-tight">Send SOS Link</h3>
+                  <p className="text-[10px] text-zinc-400 leading-tight mt-0.5">Direct SMS to Highway Caller</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSmsModalOpen(false)}
+                className="text-zinc-400 hover:text-white p-1 rounded transition cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSendOperatorSms} className="space-y-3">
+              <div>
+                <label className="block text-xs font-mono text-zinc-300 mb-1">
+                  Recipient Phone Number
+                </label>
+                <input
+                  type="tel"
+                  value={smsPhoneInput}
+                  onChange={(e) => setSmsPhoneInput(e.target.value)}
+                  placeholder="e.g. 9876543210 or +91..."
+                  disabled={smsSending}
+                  className="w-full bg-[#18181b] border border-[#27272a] focus:border-cyan-400 rounded-lg px-3 py-2 text-xs font-mono text-white placeholder-zinc-600 focus:outline-none"
+                />
+                <p className="text-[10px] text-zinc-400 mt-1 leading-normal">
+                  Transmits public /sos incident link for immediate GPS &amp; carriageway reporting.
+                </p>
+              </div>
+
+              {smsFeedback && (
+                <div
+                  className={`p-3 rounded-lg border text-xs space-y-0.5 ${
+                    smsFeedback.type === 'success'
+                      ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-200'
+                      : smsFeedback.type === 'warning'
+                      ? 'bg-amber-950/40 border-amber-500/40 text-amber-200'
+                      : 'bg-rose-950/40 border-rose-500/40 text-rose-200'
+                  }`}
+                >
+                  <p className="font-bold flex items-center gap-1.5">
+                    {smsFeedback.type === 'success' ? (
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                    ) : (
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                    )}
+                    {smsFeedback.title}
+                  </p>
+                  <p className="text-[11px] opacity-90 leading-relaxed">{smsFeedback.description}</p>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-[#27272a]">
+                <button
+                  type="button"
+                  onClick={() => setIsSmsModalOpen(false)}
+                  disabled={smsSending}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-400 hover:text-white bg-[#18181b] hover:bg-[#222226] border border-[#27272a] transition cursor-pointer"
+                >
+                  Close
+                </button>
+                <button
+                  type="submit"
+                  disabled={smsSending || !smsPhoneInput.trim()}
+                  className="px-4 py-1.5 rounded-lg text-xs font-bold text-zinc-950 bg-cyan-400 hover:bg-cyan-300 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center gap-1.5 shadow-md shadow-cyan-950/50 cursor-pointer"
+                >
+                  {smsSending ? (
+                    <>
+                      <div className="h-3 w-3 border-2 border-zinc-950 border-t-transparent rounded-full animate-spin" />
+                      <span>Sending...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-3 w-3" />
+                      <span>Send Link</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

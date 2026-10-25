@@ -203,7 +203,7 @@ export default function MobileSOSPage() {
     setDirection(targetDir);
 
     try {
-      const { error } = await supabase.from('incidents').insert([
+      const { data, error } = await supabase.from('incidents').insert([
         {
           corridor: 'NH-16 (Guntur - Vijayawada Express)',
           heading_direction: targetDir,
@@ -212,10 +212,22 @@ export default function MobileSOSPage() {
           status: 'ACTIVE',
           is_sms_fallback: smsFallback,
         },
-      ]);
+      ]).select('id');
 
       if (error) throw error;
       setSent(true);
+
+      // Automated non-blocking responder notification
+      if (data && data[0]?.id) {
+        fetch('/api/sms/notify-responder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ incidentId: data[0].id }),
+        }).catch((notifyErr) => {
+          // Non-blocking: SMS failure never invalidates or delays the confirmed incident
+          console.warn('[SMS] Non-blocking responder alert failed to dispatch:', notifyErr);
+        });
+      }
     } catch (err) {
       console.error(err);
       setSubmitError('Online SOS submission failed. Dispatch notification is NOT confirmed.');
